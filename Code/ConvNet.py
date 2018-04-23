@@ -1,4 +1,3 @@
-#%% --------------------------------------------------------------------------------------------
 import torch
 import torchvision
 import torchvision.transforms as transforms
@@ -8,11 +7,11 @@ import torch.nn as nn
 from torch.autograd import Variable
 import time
 import torch.nn.functional as F
-#%% --------------------------------------------------------------------------------------------
+
 # Hyper Parameters
 input_size = 3 *96 * 96
 num_classes = 10
-num_epochs = 2
+num_epochs = 10
 batch_size = 4
 learning_rate = 0.001
 
@@ -52,10 +51,7 @@ class Net(nn.Module):
         super(Net, self).__init__()
         self.conv1 = nn.Conv2d(in_channels=3, out_channels=8, kernel_size=2, stride=1, padding=1, dilation=1, groups=1, bias=True)
         self.pool = nn.MaxPool2d(2, stride=1, padding=0, dilation=1, return_indices=False, ceil_mode=False)
-        self.conv2 = nn.Conv2d(in_channels=8, out_channels=16, kernel_size=2, stride=1, padding=1, dilation=1, groups=1, bias=True)
-        #self.conv3 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=4, stride=2, padding=0, dilation=1, groups=1, bias=True)
-        #self.conv4 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2, padding=0, dilation=1, groups=1, bias=True)
-        #self.convdrop=nn.Dropout2d(0.2)        
+        self.conv2 = nn.Conv2d(in_channels=8, out_channels=16, kernel_size=2, stride=1, padding=1, dilation=1, groups=1, bias=True)               
         self.fc1 = nn.Linear(96*96*16,1000)
         self.fc2 = nn.Linear(1000,100)
         self.fc3 = nn.Linear(100,10)
@@ -64,9 +60,6 @@ class Net(nn.Module):
     def forward(self, input):
         x = F.relu(self.pool(self.conv1(input)))
         x = F.relu(self.pool(self.conv2(x)))
-        #x = self.pool(F.relu(self.convdrop(self.conv3(x))))
-        #x = self.pool(F.relu(self.convdrop(self.conv4(x))))
-        #print(x.view)
         x = x.view(4,-1)
         x = F.relu(self.fc1(x))
         x = F.dropout(x,0.2)
@@ -81,11 +74,10 @@ optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
 # %%--------------------------------------------------------------------------------------------
 # Train the Model
 t0 = time.time()
-for epoch in range(5):
+for epoch in range(num_epochs):
     for i, data in enumerate(train_loader):
         # Convert torch tensor to Variable
         images, labels = data
-        #images= images.view(-1,3 * 92 * 92)
 
         # wrap them in Variable
         images, labels = Variable(images.cuda()), Variable(labels.cuda())
@@ -109,6 +101,19 @@ print('This Job took ',time.time()-t0,' seconds to train on GPU')
 
 correct = 0
 total = 0
+for images, labels in train_loader:
+    images = Variable(images.cuda())
+    outputs = net(images)
+    _, predicted = torch.max(outputs.data,1)
+    total += labels.size(0)
+    correct += (predicted.cpu()==labels).sum()
+    
+print('Accuracy of the network on the train images: %d %%' %(100*correct/total))
+# %%--------------------------------------------------------------------------------------------
+# Test the Model
+
+correct = 0
+total = 0
 for images, labels in test_loader:
     images = Variable(images.cuda())
     outputs = net(images)
@@ -116,7 +121,7 @@ for images, labels in test_loader:
     total += labels.size(0)
     correct += (predicted.cpu()==labels).sum()
     
-print('Accuracy of the network on the 50000 test images: %d %%' %(100*correct/total))
+print('Accuracy of the network on the test images: %d %%' %(100*correct/total))
 #%%
 class_correct = list(0. for i in range(10))
 class_total = list(0. for i in range(10))
@@ -134,4 +139,32 @@ for data in train_loader:
 for i in range(10):
     print('Accuracy of %5s : %2d %%' % (classes[i], 100 * class_correct[i] / class_total[i]))
 
-# --------------------------------------------------------------------------------------------
+# %%--------------------------------------------------------------------------------------------
+class_correct = list(0. for i in range(10))
+class_total = list(0. for i in range(10))
+for data in test_loader:
+    images, labels = data
+    images = Variable(images.cuda())
+    outputs = net(images)
+    _, predicted = torch.max(outputs.data, 1)
+    c = (predicted.cpu() == labels).squeeze()
+    for i in range(1):
+       label = labels[i]
+       class_correct[label] += c[i]
+       class_total[label] += 1
+
+for i in range(10):
+    print('Accuracy of %5s : %2d %%' % (classes[i], 100 * class_correct[i] / class_total[i]))
+
+#%%
+
+confusion = np.zeros((len(classes),len(classes)))
+
+for data in test_loader:
+    images, labels = data
+    images = Variable(images.cuda())
+    outputs = net(images)
+    _, predicted = torch.max(outputs.data, 1)
+    for i in range(0,len( predicted)):  
+        confusion[labels[i]][predicted[i]]+=1
+print(confusion)
